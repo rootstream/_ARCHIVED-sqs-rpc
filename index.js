@@ -115,6 +115,7 @@ class SqsRpc extends EventEmitter2 {
       .catch(err => {
         debug('call with token %s expired without a response: %o', token, err);
         delete this._callbacks[token];
+        throw err; // re-throw to user
       });
   }
 
