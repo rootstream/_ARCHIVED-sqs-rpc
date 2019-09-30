@@ -2,48 +2,47 @@
 
 const _ = require('lodash');
 const rc = require('rc');
-const debug = require('debug')('sqsrpc');
+const once = require('@rootstream/once');
+const debug = require('debug')('sqsrpc:index');
+const assert = require('assert');
 const uniqid = require('uniqid');
+const Promise = require('bluebird');
 const { Consumer } = require('sqs-consumer');
+const { EventEmitter2 } = require('eventemitter2');
 
-async function messageLoop(message) {
-  debug('raw message: %o', message);
-  try {
-    const payload = JSON.parse(_.get(message, 'Body', ''));
-    debug('consuming message with payload: %o', payload);
-    await this._consume.call(this, payload);
-  } catch (err) {
-    debug('message consumption failed: %o', err);
-  }
-}
-
-class SqsRpc {
+class SqsRpc extends EventEmitter2 {
   constructor(opts) {
-    this._opts = _.defaultsDeep(opts, getConfig().config);
-    this._id = uniqid('client');
+    opts = _.defaultsDeep(opts, getConfig().config);
+    super({ wildcard: true, maxListeners: opts.listeners });
+    this._opts = opts;
+    this._id = uniqid('client-');
     this._callbacks = [];
     this._consumer = Consumer.create({
       queueUrl: this._opts.endpoint,
-      handleMessage: messageLoop.bind(this),
+      handleMessage: this._consume.bind(this),
+      terminateVisibilityTimeout: true,
       ...this._opts.consumerOpts,
     });
-
-    this._consumer.on('error', err => {
-      debug('sqs consumer error: %o', err);
-    });
-
-    this._consumer.on('processing_error', err => {
-      debug('sqs consumer processing error: %o', err);
-    });
-
-    this._consumer.on('timeout_error', err => {
-      debug('sqs consumer timeout error: %o', err);
-    });
+    // make sure start() and stop() is not spam-able
+    this.stop = once(this._stop).bind(this);
+    this.start = once(this._start).bind(this);
   }
 
-  async _consume(what) {
-    const { to, from, payload } = JSON.parse(what);
-    assert.ok(to === this._id);
+  /**
+   * Consumes a single SQS message, if this method throws, the message is put back onto the queue
+   * @param {Object} message the message sent to us by the SQS queue
+   * @private
+   */
+  async _consume(message) {
+    debug('raw message: %o', message);
+    // this throw if message does not have a well formatted json body
+    const body = JSON.parse(_.get(message, 'Body', ''));
+    const { to, from, payload } = body;
+    // make sure this message is addressed to us, otherwise throw and put it back onto the queue
+    assert.ok(to === this.id);
+    // sanity checks
+    assert.ok(from);
+    assert.ok(payload && _.isObject(payload));
 
     const type = _.get(payload, 'type', '');
     const token = _.get(payload, 'token', 'invalid');
@@ -53,7 +52,7 @@ class SqsRpc {
       const args = _.get(payload, 'args', []);
       const fn = _.first(this.listeners(name));
       assert.ok(_.isFunction(fn));
-      const ret = await fn.apply(null, args);
+      const ret = await fn.apply(this, args);
       await this._send(
         JSON.stringify({
           to: from,
@@ -72,12 +71,33 @@ class SqsRpc {
     }
   }
 
+  /**
+   * Sends a message to the underlying SQS queue
+   * @param {string} message string to send to the queue
+   * @private
+   */
+  async _send(message) {
+    assert.ok(this._consumer.sqs);
+    assert.ok(_.isString(message));
+    await this._consumer.sqs
+      .sendMessage({
+        DelaySeconds: 0,
+        MessageBody: message,
+        QueueUrl: this._opts.endpoint,
+      })
+      .promise();
+  }
+
+  get id() {
+    return this._id;
+  }
+
   async emit(to, name, ...args) {
-    const token = uniqid(this._id);
+    const token = uniqid(`${this.id}-rpc-`);
     await this._send(
       JSON.stringify({
         to,
-        from: this._id,
+        from: this.id,
         payload: { token, name, args, type: 'REQ' },
       })
     );
@@ -91,33 +111,34 @@ class SqsRpc {
       });
   }
 
-  async _send(message) {
-    await this._consumer.sqs
-      .sendMessage({
-        DelaySeconds: 0,
-        MessageBody: message,
-        QueueUrl: this._opts.endpoint,
-      })
-      .promise();
-  }
-
-  start() {
+  async _start() {
+    debug('starting the sqs rpc consumer');
     this._consumer.start();
   }
 
-  stop() {
+  async _stop() {
+    debug('stopping the sqs rpc consumer');
+    this._callbacks = [];
+    const waitUntilStopped = new Promise(resolve => {
+      this._consumer.once('stopped', resolve);
+    }).timeout(this._opts.timeout);
     this._consumer.stop();
+    await waitUntilStopped;
   }
 }
 
 const DEFAULT_CONFIG = {
-  config: { endpoint: '', timeout: 5000, consumerOpts: { waitTimeSeconds: 1 } },
+  config: {
+    endpoint: '',
+    timeout: 9999,
+    listeners: 10,
+    consumerOpts: {
+      waitTimeSeconds: 1,
+    },
+  },
 };
 const USER_CONFIG = rc('sqsrpc', DEFAULT_CONFIG);
 const CONFIG = _.assign({}, DEFAULT_CONFIG, USER_CONFIG);
 const getConfig = () => CONFIG;
 
 module.exports = SqsRpc;
-
-const instance = new SqsRpc();
-instance.start();

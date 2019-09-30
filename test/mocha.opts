@@ -1,0 +1,10 @@
+# mocha.opts
+
+# bail is added so we can inspect logs easier
+--bail
+# colors mess up our CI output
+--no-colors
+--recursive
+--full-trace
+--inline-diffs
+--timeout 30000
