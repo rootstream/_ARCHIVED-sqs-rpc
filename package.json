@@ -15,7 +15,7 @@
     "rpc"
   ],
   "author": "Sepehr Laal",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/rootstream/sqs-rpc/issues"
   },
