@@ -1,0 +1,38 @@
+version: 2
+jobs:
+  build_and_test:
+    docker:
+      - image: node
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "package.json" }}
+      - run: npm install
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies-{{ checksum "package.json" }}
+      - run: npm test
+
+  publish:
+    docker:
+      - image: node
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - run: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/repo/.npmrc
+      - run: npm publish --access public
+
+workflows:
+  version: 2
+  build_and_publish:
+    jobs:
+      - build_and_test
+      - publish:
+          requires:
+            - build_and_test
+          filters:
+            branches:
+              only: master
