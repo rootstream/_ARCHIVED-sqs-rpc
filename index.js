@@ -10,6 +10,13 @@ const Promise = require('bluebird');
 const { Consumer } = require('sqs-consumer');
 const { EventEmitter2 } = require('eventemitter2');
 
+/**
+ * @class SqsRpc
+ * A minimalist's implementation of basic RPC (Remote Procedure Call) over AWS SQS for NodeJS
+ * AWS SQS is a very simple managed queue service that is almost infinitely scalable. Using this RPC solution you can
+ * de-couple your NodeJS micro services and turn stateful REST apis into transient REST apis. Look at the README file
+ * for more documentation on usage of this class
+ */
 class SqsRpc extends EventEmitter2 {
   constructor(opts) {
     opts = _.defaultsDeep(opts, getConfig().config);
@@ -23,7 +30,7 @@ class SqsRpc extends EventEmitter2 {
       terminateVisibilityTimeout: true,
       ...this._opts.consumerOpts,
     });
-    // make sure start() and stop() is not spam-able
+    // make sure start() and stop() are not spam-able
     this.stop = once(this._stop).bind(this);
     this.start = once(this._start).bind(this);
   }
