@@ -13,6 +13,13 @@ describe('sqs-rpc tests', () => {
     chai.assert.ok(true);
   });
 
+  it('should time out when calling a non registered method', async () => {
+    const rpc = new SqsRpc();
+    await chai.assert.isFulfilled(rpc.start());
+    await chai.assert.isRejected(rpc.emit(rpc.id, 'sample-method'));
+    await chai.assert.isFulfilled(rpc.stop());
+  });
+
   it('should be able to perform basic RPC tasks', async () => {
     const rpc1 = new SqsRpc();
     const rpc2 = new SqsRpc();

@@ -1,5 +1,7 @@
 # sqs-rpc
 
+[![CircleCI](https://circleci.com/gh/rootstream/sqs-rpc/tree/master.svg?style=svg)](https://circleci.com/gh/rootstream/sqs-rpc/tree/master)
+
 A minimalist's implementation of a basic Remote Procedure Call (RPC) solution based on AWS SQS queues.
 
 AWS SQS is a very simple managed queue service that is almost infinitely scalable. Using this RPC solution you can

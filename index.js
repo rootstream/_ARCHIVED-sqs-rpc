@@ -67,14 +67,13 @@ class SqsRpc extends EventEmitter2 {
           payload: { token, ret, type: 'ACK' },
         })
       );
-    } else if (type === 'ACK') {
+    }
+
+    if (type === 'ACK') {
       assert.ok(this._callbacks[token]);
       const ret = _.get(payload, 'ret');
       this._callbacks[token](ret);
       delete this._callbacks[token];
-    } else {
-      debug('invalid message type: %s', type);
-      assert.ok(false);
     }
   }
 
@@ -115,6 +114,7 @@ class SqsRpc extends EventEmitter2 {
       .catch(err => {
         debug('call with token %s expired without a response: %o', token, err);
         delete this._callbacks[token];
+        throw err; // re-throw to user
       });
   }
 
