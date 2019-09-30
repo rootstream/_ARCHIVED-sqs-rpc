@@ -67,14 +67,13 @@ class SqsRpc extends EventEmitter2 {
           payload: { token, ret, type: 'ACK' },
         })
       );
-    } else if (type === 'ACK') {
+    }
+
+    if (type === 'ACK') {
       assert.ok(this._callbacks[token]);
       const ret = _.get(payload, 'ret');
       this._callbacks[token](ret);
       delete this._callbacks[token];
-    } else {
-      debug('invalid message type: %s', type);
-      assert.ok(false);
     }
   }
 
